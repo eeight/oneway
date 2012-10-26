@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<ymaps:ymaps xmlns:ymaps="http://maps.yandex.ru/ymaps/1.x" xmlns:gml="http://www.opengis.net/gml" xmlns:r="http://maps.yandex.ru/router/1.x">
+    <ymaps:GeoObjectCollection>
+{{#ROUTE}}
+        <gml:metaDataProperty>
+            <r:RouterRouteMetaData>
+    {{#NOT_FOUND}}
+            <r:notFound/>
+    {{/NOT_FOUND}}
+    {{#BLOCKED}}
+            <r:blocked/>
+    {{/BLOCKED}}
+    {{#TIMES}}
+            <r:length>{{LENGTH}}</r:length>
+            <r:jamsTime>{{JAMS_TIME}}</r:jamsTime>
+    {{/TIMES}}
+            </r:RouterRouteMetaData>
+        </gml:metaDataProperty>
+{{/ROUTE}}
+    </ymaps:GeoObjectCollection>
+</ymaps:ymaps>
