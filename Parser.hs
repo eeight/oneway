@@ -1,3 +1,8 @@
+module Parser( Template
+             , TemplatePiece(..)
+             , parseTemplate
+             ) where
+
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Attoparsec.ByteString.Char8 as A
 
