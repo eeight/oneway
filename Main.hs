@@ -1,5 +1,6 @@
 import Parser
 import Automata
+import Generator
 
 import Control.Monad
 import Data.Vector(toList)
@@ -12,3 +13,5 @@ main = do
     let auto = buildAutomata template
     putStrLn ""
     forM_ (toList auto) print
+    putStrLn ""
+    generate auto 0
