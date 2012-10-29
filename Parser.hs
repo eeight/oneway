@@ -23,22 +23,28 @@ parseTemplate = template <* A.endOfInput where
 
     piece = block <|> variable <|> string
 
+    control =
+        A.string (B.pack "{{") *> A.takeWhile1 (/= '}') <* A.string (B.pack "}}")
+
     block = do
-        A.string $ B.pack "{{#"
-        name <- A.takeWhile1 (/= '}')
-        A.string $ B.pack "}}"
+        header <- control
+        when (B.head header /= '#') $
+                fail "Block begin tag must begin with `#'"
+        let name = B.tail header
         body <- template
-        A.string $ B.pack "{{/"
-        A.string name
-        A.string $ B.pack "}}"
+        footer <- control
+        when (B.head footer /= '/') $
+                fail "Block end tag must begin with `/'"
+        let name' = B.tail footer
+        when (name /= name) $
+                fail $ "Begin and end tags mismatch:  " ++
+                    B.unpack name ++ " and " ++ B.unpack name'
         return $ TemplateBlock name body
 
     variable = do
-        A.string $ B.pack "{{"
-        name <- A.takeWhile1 (/= '}')
+        name <- control
         when (B.head name == '#' || B.head name == '/') $
             fail "Variable name cannot start with '#' or '/'"
-        A.string $ B.pack "}}"
         return $ TemplateVariable name
 
     string = TemplateString <$> A.takeWhile1 (/= '{')
