@@ -23,8 +23,8 @@ parseTemplate = template <* A.endOfInput where
 
     piece = block <|> variable <|> string
 
-    control =
-        A.string (B.pack "{{") *> A.takeWhile1 (/= '}') <* A.string (B.pack "}}")
+    control = str "{{" *> A.takeWhile1 (/= '}') <* str "}}" where
+        str = A.string . B.pack
 
     block = do
         header <- control

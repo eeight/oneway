@@ -1,144 +1,85 @@
-{-# LANGUAGE RecordWildCards, LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 module Automata( Edge(..)
-               , State(..)
                , Automata
                , buildAutomata
+               , incomingStates
+               , viableStates
+               , finalState
                , fastforward
-               , carry
                ) where
 
 import qualified Data.ByteString.Char8 as B
+import qualified Data.Map as M
 import qualified Data.IntSet as S
-import qualified Data.Vector as V
-import qualified Data.Vector.Mutable as VM
 
-import Control.Arrow(first, second)
-import Control.Monad
-import Control.Monad.ST
-import Data.STRef
-import Data.Vector((!))
-import Data.List(find)
+import Control.Arrow((***), first, second)
+import Control.Monad(liftM, forM_)
+import Control.Monad.State(evalState, execState, modify, get, State)
+import Data.List(tails)
 
 import Parser
 
+type Automata = [Edge]
 
-data Edge = Append B.ByteString
-          | SetVariable B.ByteString
-          | BeginBlock B.ByteString
-          | EndBlock
+data Edge = Append Int Int B.ByteString
+          | SetVariable Int Int B.ByteString
+          | Block Int B.ByteString Automata
     deriving (Show)
 
-data State = State
-    { outEdges :: [(Int, Edge)]
-    , inEdges :: [(Int, B.ByteString)]
-    } deriving (Show)
-
-type STAutomata s = VM.STVector s State
-type Automata = V.Vector State
-
-growAutomata automata count = do
-    v <- readSTRef automata
-    writeSTRef automata =<< VM.grow v count
-
-addState automata = do
-    v <- readSTRef automata >>= flip VM.grow 1
-    let result = VM.length v - 1
-    VM.write v result (State [] [])
-    writeSTRef automata v
-    return result
-
-addOutState target ann State{..} =
-    State ((target, ann):outEdges) inEdges
-
-addInState source str State{..} =
-    State outEdges ((source, str):inEdges)
-
-modify v index f = VM.write v index . f =<< VM.read v index
-
-modifyRef ref index f = do
-    vector <- readSTRef ref
-    modify vector index f
-
-statesNumber [] = 1
-statesNumber (t:ts) = statesNumber ts + case t of
-    TemplateBlock _ body -> statesNumber body
-    _ -> 1
-
-buildSTAutomata :: Template -> ST s (STAutomata s)
-buildSTAutomata template = do
-    VM.replicate (statesNumber template) (State [] []) >>= \automata -> let
-        mod = modify automata
-
-        go _ _ [] = return ()
-        go lastState statesNumber (t:ts) = let
-            appendState edge = do
-                mod lastState (addOutState statesNumber edge)
-                go statesNumber (statesNumber + 1) ts
-            in case t of
-                TemplateString str -> appendState $ Append str
-                TemplateVariable name -> appendState $ SetVariable name
-                TemplateBlock name body -> do
-                    subAutomata <- buildSTAutomata body
-                    let subLength = VM.length subAutomata
-                    forM_ [0..subLength - 1] $ \i -> do
-                        State{..} <- VM.read subAutomata i
-                        let outEdges' = map (first (+ statesNumber)) outEdges
-                        VM.write automata (i + statesNumber)
-                                (State outEdges' [])
-                    mod lastState (addOutState statesNumber (BeginBlock name))
-                    mod (statesNumber + subLength - 1)
-                            (addOutState lastState EndBlock)
-                    go lastState (statesNumber + subLength) ts
-        in go 0 1 template >> return automata
-
-fillInEdges automata = do
-    let hasIn state from = do
-        State{..} <- VM.read automata state
-        return $ find ((== from) . fst) inEdges /= Nothing
-
-    let appendIn state [] = return False
-        appendIn state ((from, str):fs) = do
-            hasIn state from >>= \x -> if x
-                then appendIn state fs
-                else do
-                    modify automata state (addInState from str)
-                    appendIn state fs
-                    return True
-    let
-        ap (Append str) = Just str
-        ap EndBlock = Just B.empty
-        ap _ = Nothing
-
-    let propagate i = do
-        State{..} <- VM.read automata i
-        forM_ outEdges $ \(next, edge) -> case ap edge of
-            Just str -> do
-                let nextInEdges =
-                        (i, str):map (second $ flip B.append str) inEdges
-                appendIn next nextInEdges >>= \x -> if x
-                    then propagate next
-                    else return()
-            _ -> return ()
-    (begin, _) <- liftM (flip fastforward 0) $ V.unsafeFreeze automata
-    forM_ [begin..VM.length automata - 1] propagate
-
 buildAutomata :: Template -> Automata
-buildAutomata t = runST $ do
-    a <- buildSTAutomata t
-    fillInEdges a
-    V.freeze a
+buildAutomata template = evalState (go template) (0, 0) where
+    go [] = return []
+    go (t:ts) = do
+        (n, lastN) <- get
+        let n' = n + 1
+        modify $ succ *** (const n')
+        let ret piece = liftM (piece:) $ go ts
+        case t of
+            TemplateString str -> ret $ Append lastN n' str
+            TemplateVariable name -> ret $ SetVariable lastN n' name
+            TemplateBlock name block -> do
+                subtemplate <- go block
+                modify $ second (const lastN)
+                ret $ Block lastN name subtemplate
+finalState :: Automata -> Int
+finalState automata = case (last automata) of
+    Append _ to _ -> to
+    SetVariable _ to _ -> to
+    Block state _ _ -> state
 
-fastforward' :: Automata -> Int -> Maybe Int -> (Int, B.ByteString)
-fastforward' automata state target = second (B.concat . reverse) $ go [] state where
-    go acc state = case automata V.! state of
-        (State [(next, Append str)] _) ->
-            if Just next == target then (state, acc) else go (str:acc) next
-        _ -> (state, acc)
+incomingStates :: Automata -> M.Map Int [(Int, B.ByteString)]
+incomingStates automata = execState (forM_ automata go) M.empty where
+    copyList src dst f = modify $ \map ->
+            M.insertWith (++) dst (f $ maybe [] id $ M.lookup src map) map
 
-fastforward :: Automata -> Int -> (Int, B.ByteString)
-fastforward automata state = fastforward' automata state Nothing
+    go (Append from to str) =
+        copyList from to $ ((from, str):) . map (second $ flip B.append str)
 
-carry :: Automata -> Int -> Int -> Maybe B.ByteString
-carry automata from to = let
-    (target, str) = fastforward' automata from (Just to)
-    in if target == to then Just str else Nothing
+    go (SetVariable _ to _) = return ()
+
+    go (Block state _ subblock) = do
+        forM_ subblock go
+        let lastState = finalState subblock
+        copyList lastState state ((lastState, B.empty):)
+
+fastforward :: Automata -> Maybe (Int, B.ByteString)
+fastforward (Append _ to str:_) = Just (to, str)
+fastforward (SetVariable state _ _:_) = Just (state, B.empty)
+fastforward (Block state _ _:_) = Just (state, B.empty)
+fastforward _ = Nothing
+
+viableStates :: Automata -> S.IntSet
+viableStates automata = let
+    append = modify . S.insert
+
+    appendFirst tail = maybe (return ()) (append . fst) (fastforward tail)
+
+    go [] = return ()
+    go (t:ts) = case t of
+        Append{} -> return ()
+        SetVariable _ to _ -> if null ts
+            then append to
+            else appendFirst ts
+        Block _ _ body -> appendFirst body >> forM_ (tails body) go
+
+    in execState (appendFirst automata >> forM_ (tails automata) go) S.empty

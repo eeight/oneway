@@ -8,10 +8,17 @@ import Data.Attoparsec
 import qualified Data.ByteString.Char8 as B
 
 main = do
-    Right template <- liftM (parseOnly parseTemplate) B.getContents
-    print template
-    let auto = buildAutomata template
-    putStrLn ""
-    forM_ (toList auto) print
-    putStrLn ""
-    generate auto 0
+    template <- liftM (parseOnly parseTemplate) B.getContents
+    case template of
+        Left err -> putStrLn $ "Error in template syntax: " ++ err
+        Right template -> do
+            putStrLn "template:"
+            print template
+            putStrLn "automata:"
+            let auto = buildAutomata template
+            print auto
+            putStrLn "incoming states:"
+            print $ incomingStates auto
+            putStrLn "viable states:"
+            print $ viableStates auto
+            generate auto (B.pack "toplevel_template") 0
