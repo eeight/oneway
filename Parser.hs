@@ -36,7 +36,7 @@ parseTemplate = template <* A.endOfInput where
         when (B.head footer /= '/') $
                 fail "Block end tag must begin with `/'"
         let name' = B.tail footer
-        when (name /= name) $
+        when (name /= name') $
                 fail $ "Begin and end tags mismatch:  " ++
                     B.unpack name ++ " and " ++ B.unpack name'
         return $ TemplateBlock name body
