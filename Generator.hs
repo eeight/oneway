@@ -1,5 +1,5 @@
-module Generator where
-
+module Generator( generateCxx
+                ) where
 import Automata
 
 import qualified Data.ByteString.Char8 as B
@@ -33,10 +33,10 @@ makeClassName name = case makeVariableName name of
     (x:xs) -> toUpper x:xs
     [] -> []
 
-generate :: Automata -> B.ByteString -> Int -> IO ()
-generate automata name indent = let
+generateCxx :: Automata -> B.ByteString -> IO ()
+generateCxx automata name = let
     states = viableStates automata
-    inStates = incomingStates automata 
+    inStates = incomingStates automata
 
     generateTemplate automata name indent = let
         doPut level str = putStr (concat $ replicate level "  ") >> putStr str
@@ -66,7 +66,7 @@ generate automata name indent = let
                 put'' $ printf "// incoming in %d\n" state
                 put'' "switch (state_) {\n"
                 put'' "default:\n"
-                put''' "  throw WrongState();\n"
+                put''' $ printf "wrongState(state_, %d);\n" state
                 forM_ fromGroups $ \(fs, str) -> do
                         put' " "
                         forM_ fs $ printf " case %d:"
@@ -94,7 +94,10 @@ generate automata name indent = let
             let className = makeClassName name
             put' $ printf "%s *add%s() {\n" className className
             generateIncoming state
-            put'' $ printf "return reinterpret_cast<%s*>(this);\n" className
+            put'' $ printf
+                "auto result = reinterpret_cast<%s*>(this);\n" className
+            put'' "result->construct();\n"
+            put'' "return result;\n"
             put' "}\n"
 
         generatePiece _ = return ()
@@ -104,17 +107,30 @@ generate automata name indent = let
             put $ printf "class %s : private AbstractTemplate {\n" className
             put "public:\n"
             put' $ printf "%s() {\n" className
+            put'' "construct();\n"
+            put' $ "}\n"
+
+            put' "void construct() {\n"
             maybePutText'' carry
             put'' $ printf "state_ = %d;\n" realBegin
-            put' $ "}\n"
+            put' "}\n"
+
+            put' "const char* data() const { return getData(); }\n"
+            put' "size_t size() const { return getSize(); }\n"
 
             forM_ (tails automata) generatePiece
 
-            put' $ printf "~%s() {\n" className
+            put' $ printf "void finalize() {\n"
             generateIncoming (finalState automata)
+            put' "}\n"
+
+            put' $ printf "~%s() {\n" className
+            put'' "finalize();\n"
             put' "}\n"
 
             put "};\n"
 
     in do
-        generateTemplate automata name indent
+        putStrLn "#include \"abstract_template.h\""
+        putStrLn ""
+        generateTemplate automata name 0
