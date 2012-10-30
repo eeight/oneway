@@ -47,9 +47,8 @@ generateCxx automata name = let
 
         doMaybePutText level str
             | B.null str = return ()
-            | otherwise = let
-                str' = escape str
-                in doPut level $ printf "put(\"%s\", %d);\n" str' (length str')
+            | otherwise = doPut level $
+                printf "put(\"%s\", %d);\n" (escape str) (B.length str)
         maybePutText = doMaybePutText indent
         maybePutText' = doMaybePutText (indent + 1)
         maybePutText'' = doMaybePutText (indent + 2)
