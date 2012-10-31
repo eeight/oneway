@@ -1,7 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 import Parser(parseTemplate)
 import Automata(buildAutomata, viableStates, incomingStates)
-import Generator(generateCxx)
+--import OnewayCxxGenerator(generateCxx)
+import SimpleCxxGenerator(generateCxx)
 
 import qualified Data.ByteString.Char8 as B
 

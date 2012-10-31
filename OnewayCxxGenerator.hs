@@ -1,38 +1,17 @@
-module Generator( generateCxx
-                ) where
+module OnewayCxxGenerator( generateCxx
+                         ) where
 import Automata
+import CxxFormatter
 import StringMerger
 
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy as L
-import qualified Data.ByteString.Search as B
 import qualified Data.IntSet as S
 import qualified Data.Map as M
 
 import Control.Monad
-import Data.Char(toLower, toUpper)
 import Data.Function(on)
 import Data.List(sort, sortBy, groupBy, tails)
 import Text.Printf
-
-escape str = let
-    escapes = [
-            ("\r", "\\r"),
-            ("\n", "\\n"),
-            ("\"", "\\\""),
-            ("\\", "\\\\")]
-    replaceOne (a, b) = B.concat . L.toChunks . B.replace (B.pack a) (B.pack b)
-    replaced = foldr replaceOne str escapes
-    in B.unpack replaced
-
-makeVariableName = go . B.unpack where
-    go [] = []
-    go ('_':x:xs) = toUpper x:go xs
-    go (x:xs) = toLower x:go xs
-
-makeClassName name = case makeVariableName name of
-    (x:xs) -> toUpper x:xs
-    [] -> []
 
 generateCxx :: Automata -> B.ByteString -> IO ()
 generateCxx automata name = let
@@ -140,7 +119,4 @@ generateCxx automata name = let
 
             put "};\n"
 
-    in do
-        putStrLn "#include \"abstract_template.h\""
-        putStrLn ""
-        generateTemplate automata name 0 True
+    in generateTemplate automata name 0 True
