@@ -1,6 +1,7 @@
 module CxxFormatter (escape
                     , makeVariableName
                     , makeClassName
+                    , makeOnewayClassName
                     ) where
 
 import qualified Data.ByteString.Char8 as B
@@ -30,4 +31,4 @@ makeClassName name = case makeVariableName name of
     (x:xs) -> toUpper x:xs
     [] -> []
 
-
+makeOnewayClassName = (++ "Oneway") . makeClassName

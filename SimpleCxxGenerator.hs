@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
-module SimpleCxxGenerator( generateCxx
-                         ) where
+module SimpleCxxGenerator(generateCxx) where
+
 import Automata
 import CxxFormatter
 
@@ -13,15 +13,19 @@ import Text.Printf
 
 generateCxx :: Automata -> B.ByteString -> IO ()
 generateCxx automata name = let
-    generateTemplate automata name indent = let
-        doPut level str = putStr (concat $ replicate level "  ") >> putStr str
+    generateTemplate automata name indent parentName = let
+        doPut level str =
+                putStr (concat $ replicate level "  ") >> putStr str
         put = doPut indent
         put' = doPut (indent + 1)
         put'' = doPut (indent + 2)
         put''' = doPut (indent + 3)
 
-        generateSubtemplate (Block _ name body) =
-                generateTemplate body name (indent + 1)
+        generateSubtemplate (Block _ name' body) = generateTemplate
+                body
+                name'
+                (indent + 1)
+                (Just name)
         generateSubtemplate _ = return ()
 
         generateMethod (Block _ name body) = lift $ do
@@ -30,6 +34,10 @@ generateCxx automata name = let
             put' $ printf "%s* add%s() {\n" className className
             put'' $ printf "%s_.emplace_back();\n" variableName
             put'' $ printf "return &%s_.back();\n" variableName
+            put' "}\n"
+            put' $ printf "%s::Oneway* addOneway%s() {\n" className className
+            put'' $ printf "%s_.emplace_back();\n" variableName
+            put'' $ printf "return %s_.back().oneway();\n" variableName
             put' "}\n"
         generateMethod (SetVariable _ _ name) = do
             seen <- gets $ S.member name
@@ -55,13 +63,28 @@ generateCxx automata name = let
 
         in do
             let className = makeClassName name
+            let onewayClassName = makeOnewayClassName name
             put $ printf "class %s {\n" className
             put "public:\n"
+
+            case parentName of
+                Nothing -> put' $
+                    printf "typedef %s Oneway;\n" onewayClassName
+                Just name' -> put' $
+                    printf "typedef %s::Oneway::%s Oneway;\n"
+                            (makeClassName name') (makeOnewayClassName name)
 
             forM_ automata generateSubtemplate
             runStateT (forM_ automata generateMethod) S.empty
 
-            put' "std::string generate(std::string* string) const {\n"
+            put' "void generate(std::string* string) const {\n"
+            put'' "if (ONEWAY_OVERRIDE_) {\n";
+            put''' "ONEWAY_OVERRIDE_->finalize();\n"
+            put''' "string->append(\n"
+            put''' "    ONEWAY_OVERRIDE_->data(),\n"
+            put''' "    ONEWAY_OVERRIDE_->data() + ONEWAY_OVERRIDE_->size());\n"
+            put''' "return;\n"
+            put'' "}\n";
             forM_ automata $ \case
                 Append _ _ str -> do
                     let l = B.length  str
@@ -77,10 +100,19 @@ generateCxx automata name = let
                     put'' "}\n"
             put' "}\n"
 
+            put' "Oneway* oneway() const {\n"
+            put'' "ONEWAY_OVERRIDE_ = Oneway();\n"
+            put'' "return &ONEWAY_OVERRIDE_.get();\n"
+            put' "}\n";
+
             putStrLn ""
             put "private:\n"
             forM_ automata generateField
+            put' "mutable boost::optional<Oneway> ONEWAY_OVERRIDE_;\n"
 
             put "};\n"
 
-    in generateTemplate automata name 0
+    in do
+        putStrLn "#include <boost/optional.hpp>\n"
+        putStrLn ""
+        generateTemplate automata name 0 Nothing

@@ -1,5 +1,5 @@
-module OnewayCxxGenerator( generateCxx
-                         ) where
+module OnewayCxxGenerator(generateCxx) where
+
 import Automata
 import CxxFormatter
 import StringMerger
@@ -18,7 +18,7 @@ generateCxx automata name = let
     states = viableStates automata
     inStates = incomingStates automata
 
-    generateTemplate automata name indent toplevel = let
+    generateTemplate automata name indent = let
         doPut level str = putStr (concat $ replicate level "  ") >> putStr str
         put = doPut indent
         put' = doPut (indent + 1)
@@ -78,12 +78,13 @@ generateCxx automata name = let
             put' "}\n"
 
         generatePiece (Block state name body:_) = do
-            generateTemplate body name (indent + 1) False
+            generateTemplate body name (indent + 1)
             let className = makeClassName name
-            put' $ printf "%s *add%s() {\n" className className
+            let onewayClassName = makeOnewayClassName name
+            put' $ printf "%s *add%s() {\n" onewayClassName className
             generateIncoming state
             put'' $ printf
-                "auto result = reinterpret_cast<%s*>(this);\n" className
+                "auto result = reinterpret_cast<%s*>(this);\n" onewayClassName
             put'' "result->construct();\n"
             put'' "return result;\n"
             put' "}\n"
@@ -91,7 +92,7 @@ generateCxx automata name = let
         generatePiece _ = return ()
         in do
             let Just (realBegin, carry) = fastforward automata
-            let className = makeClassName name
+            let className = makeOnewayClassName name
             put $ printf "class %s : private AbstractTemplate {\n" className
             put "public:\n"
             put' "void construct() {\n"
@@ -99,24 +100,23 @@ generateCxx automata name = let
             put'' $ printf "state_ = %d;\n" realBegin
             put' "}\n"
 
-            when toplevel $ do
-                put' $ printf "%s() {\n" className
-                put'' "construct();\n"
-                put' $ "}\n"
+            put' $ printf "%s() {\n" className
+            put'' "construct();\n"
+            put' $ "}\n"
 
-                put' $ printf "~%s() {\n" className
-                put'' "finalize();\n"
-                put' "}\n"
+            put' $ printf "~%s() {\n" className
+            put'' "finalize();\n"
+            put' "}\n"
 
-                put' $ printf "void finalize() {\n"
-                generateIncoming (finalState automata)
-                put' "}\n"
+            put' $ printf "void finalize() {\n"
+            generateIncoming (finalState automata)
+            put' "}\n"
 
-                put' "const char* data() const { return getData(); }\n"
-                put' "size_t size() const { return getSize(); }\n"
+            put' "const char* data() const { return getData(); }\n"
+            put' "size_t size() const { return getSize(); }\n"
 
             forM_ (tails automata) generatePiece
 
             put "};\n"
 
-    in generateTemplate automata name 0 True
+    in generateTemplate automata name 0
