@@ -41,6 +41,7 @@ buildAutomata template = evalState (go template) (0, 0) where
                 subtemplate <- go block
                 modify $ second (const lastN)
                 ret $ Block lastN name subtemplate
+
 finalState :: Automata -> Int
 finalState automata = case (last automata) of
     Append _ to _ -> to
