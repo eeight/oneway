@@ -1,6 +1,7 @@
 module Generator( generateCxx
                 ) where
 import Automata
+import StringMerger
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as L
@@ -61,8 +62,13 @@ generateCxx automata name = let
                     sortBy (compare `on` snd) fromStates'
             fromGroups = map (\((i, str):ss) -> (sort $ i:map fst ss, str))
                     fromStates''
+            merger = stringMerger $ map snd fromGroups
+            constants = stringConstants merger
             in do
                 put'' $ printf "// incoming in %d\n" state
+                forM_ constants $ \(name, value) -> do
+                    put'' $ printf "const char %s[] = \"%s\";\n"
+                            name (escape value)
                 put'' "switch (state_) {\n"
                 put'' "default:\n"
                 put''' $ printf "wrongState(state_, %d);\n" state
@@ -70,7 +76,10 @@ generateCxx automata name = let
                         put' " "
                         forM_ fs $ printf " case %d:"
                         printf "\n"
-                        maybePutText''' str
+                        when (not $ B.null str) $ do
+                            let (name, offset) = oneString merger str
+                            put''' $ printf "put(%s + %d, %d);\n"
+                                    name offset (B.length str)
                         put''' "break;\n"
                 put'' "}\n"
 
