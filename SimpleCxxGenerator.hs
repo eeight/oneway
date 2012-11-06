@@ -3,116 +3,105 @@ module SimpleCxxGenerator(generateCxx) where
 
 import Automata
 import CxxFormatter
+import Generator
 
+import qualified Control.Monad.State as State
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Set as S
 
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.Trans(lift)
 import Text.Printf
 
-generateCxx :: Automata -> B.ByteString -> IO ()
+generateCxx :: (TextGeneratorMonad m) => Automata -> B.ByteString -> m ()
 generateCxx automata name = let
-    generateTemplate automata name indent parentName = let
-        doPut level str =
-                putStr (concat $ replicate level "  ") >> putStr str
-        put = doPut indent
-        put' = doPut (indent + 1)
-        put'' = doPut (indent + 2)
-        put''' = doPut (indent + 3)
-
-        generateSubtemplate (Block _ name' body) = generateTemplate
-                body
-                name'
-                (indent + 1)
-                (Just name)
+    generateTemplate automata name parentName = let
+        generateSubtemplate (Block _ name' body) =
+            indented 1 $ generateTemplate body name' (Just name)
         generateSubtemplate _ = return ()
 
-        generateMethod (Block _ name body) = lift $ do
-            let className = makeClassName name
-            let variableName = makeVariableName name
-            put' $ printf "%s* add%s() {\n" className className
-            put'' $ printf "%s_.emplace_back();\n" variableName
-            put'' $ printf "return &%s_.back();\n" variableName
-            put' "}\n"
-            put' $ printf "%s::Oneway* addOneway%s() {\n" className className
-            put'' $ printf "%s_.emplace_back();\n" variableName
-            put'' $ printf "return %s_.back().oneway();\n" variableName
-            put' "}\n"
+        generateMethod (Block _ name body) = lift $ gen 1
+                (unlines [
+                    "$Name* add$name() {",
+                    "  ${name}_.emplace_back();",
+                    "  return &${name}_.back();",
+                    "}",
+                    "",
+                    "$Name::Oneway* addOneway$Name() {",
+                    "    ${name}_.emplace_back();",
+                    "    return ${name}_.back().oneway();",
+                    "}"
+                ]) (namesContext name)
+
         generateMethod (SetVariable _ _ name) = do
-            seen <- gets $ S.member name
+            seen <- State.gets $ S.member name
             when (not seen) $ do
-                modify (S.insert name)
-                lift $ do
-                    let className = makeClassName name
-                    let variableName = makeVariableName name
-                    put' $ printf "void set%s(const char* value) {\n"
-                            className
-                    put'' $ printf "%s_ = value;\n" variableName
-                    put' "}\n"
+                State.modify (S.insert name)
+                lift $ gen 1
+                    (unlines [
+                        "void set$Name(const char* value) {",
+                        "  ${name}_ = value;",
+                        "}"
+                    ]) (namesContext name)
         generateMethod _ = return ()
 
-        generateField (Block _ name _) = do
-            let className = makeClassName name
-            let variableName = makeVariableName name
-            put' $ printf "std::vector<%s> %s_;\n" className variableName
-        generateField (SetVariable _ _ name) = do
-            let variableName = makeVariableName name
-            put' $ printf "std::string %s_;\n" variableName
+        generateField (Block _ name _) =
+            gen 1 "std::vector<$Name> ${name}_;\n" (namesContext name)
+        generateField (SetVariable _ _ name) = 
+            gen 1  "std::string ${name}_;\n" (namesContext name)
         generateField _ = return ()
 
         in do
-            let className = makeClassName name
-            let onewayClassName = makeOnewayClassName name
-            put $ printf "class %s {\n" className
-            put "public:\n"
+            let ctx = namesContext name
+            gen 0 "class $Name {\npublic:" ctx
 
-            case parentName of
-                Nothing -> put' $
-                    printf "typedef %s Oneway;\n" onewayClassName
-                Just name' -> put' $
-                    printf "typedef %s::Oneway::%s Oneway;\n"
-                            (makeClassName name') (makeOnewayClassName name)
+            indented 1 $ case parentName of
+                Nothing -> gen 0 "typedef ${Name}Oneway Oneway;\n" ctx
+                Just name' -> gen 0
+                    "typedef $PName::Oneway::${Name}Oneway Oneway;\n"
+                    (("PName", makeClassName name'):ctx)
 
             forM_ automata generateSubtemplate
-            runStateT (forM_ automata generateMethod) S.empty
+            State.runStateT (forM_ automata generateMethod) S.empty
 
-            put' "void generate(std::string* string) const {\n"
-            put'' "if (ONEWAY_OVERRIDE_) {\n";
-            put''' "ONEWAY_OVERRIDE_->finalize();\n"
-            put''' "string->append(\n"
-            put''' "    ONEWAY_OVERRIDE_->data(),\n"
-            put''' "    ONEWAY_OVERRIDE_->data() + ONEWAY_OVERRIDE_->size());\n"
-            put''' "return;\n"
-            put'' "}\n";
+            indented 1 $ put (B.pack $ unlines [
+                "void generate(std::string* string) const {",
+                "  if (ONEWAY_OVERRIDE_) {",
+                "    ONEWAY_OVERRIDE_->finalize();",
+                "    string->append(",
+                "        ONEWAY_OVERRIDE_->data(),",
+                "        ONEWAY_OVERRIDE_->data() + " ++
+                    "ONEWAY_OVERRIDE_->size());",
+                "  }",
+                "return;",
+                "}" ])
             forM_ automata $ \case
-                Append _ _ str -> do
-                    let l = B.length  str
-                    put'' $ printf "*string += \"%s\";\n" (escape str)
-                SetVariable _ _ name -> do
-                    let variableName = makeVariableName name
-                    put'' $ printf "*string += %s_;\n" variableName
-                Block _ name _ -> do
-                    let variableName = makeVariableName name
-                    put'' $ printf "for (const auto& subblock: %s_) {\n"
-                            variableName
-                    put''' "subblock.generate(string);\n"
-                    put'' "}\n"
-            put' "}\n"
+                Append _ _ str -> put $ B.pack $
+                        printf "*string += \"%s\";\n" (escape str)
+                SetVariable _ _ name -> 
+                    gen 2 "*string += ${name}_;\n" (namesContext name)
+                Block _ name _ -> gen 0
+                    (unlines [
+                        "for (const $Name& subblock: ${name}_) {",
+                        "  subblock.generate(string);",
+                        "}"
+                    ]) (namesContext name)
 
-            put' "Oneway* oneway() const {\n"
-            put'' "ONEWAY_OVERRIDE_ = Oneway();\n"
-            put'' "return &ONEWAY_OVERRIDE_.get();\n"
-            put' "}\n";
+            put (B.pack $ unlines [
+                "  Oneway* oneway() const {",
+                "    ONEWAY_OVERRIDE_ = Oneway();",
+                "    return &ONEWAY_OVERRIDE_.get();",
+                "  }",
+                "",
+                "private:",
+                "   mutable boost::optional<Oneway> ONEWAY_OVERRIDE_;"
+                ])
 
-            putStrLn ""
-            put "private:\n"
             forM_ automata generateField
-            put' "mutable boost::optional<Oneway> ONEWAY_OVERRIDE_;\n"
 
-            put "};\n"
+            put $ B.pack "};\n"
 
     in do
-        putStrLn "#include <boost/optional.hpp>\n"
-        putStrLn ""
-        generateTemplate automata name 0 Nothing
+        put $ B.pack "#include <boost/optional.hpp>\n"
+        put $ B.pack "\n"
+        generateTemplate automata name Nothing

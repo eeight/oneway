@@ -3,6 +3,7 @@ module OnewayCxxGenerator(generateCxx) where
 import Automata
 import CxxFormatter
 import StringMerger
+import Generator
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.IntSet as S
@@ -13,26 +14,16 @@ import Data.Function(on)
 import Data.List(sort, sortBy, groupBy, tails)
 import Text.Printf
 
-generateCxx :: Automata -> B.ByteString -> IO ()
+generateCxx :: (TextGeneratorMonad m) => Automata -> B.ByteString -> m ()
 generateCxx automata name = let
     states = viableStates automata
     inStates = incomingStates automata
 
-    generateTemplate automata name indent = let
-        doPut level str = putStr (concat $ replicate level "  ") >> putStr str
-        put = doPut indent
-        put' = doPut (indent + 1)
-        put'' = doPut (indent + 2)
-        put''' = doPut (indent + 3)
-
-        doMaybePutText level str
+    generateTemplate automata name = let
+        maybePutText level str
             | B.null str = return ()
-            | otherwise = doPut level $
+            | otherwise = put $ indent level $ 
                 printf "put(\"%s\", %d);\n" (escape str) (B.length str)
-        maybePutText = doMaybePutText indent
-        maybePutText' = doMaybePutText (indent + 1)
-        maybePutText'' = doMaybePutText (indent + 2)
-        maybePutText''' = doMaybePutText (indent + 3)
 
         generateIncoming state = let
             fromStates =
@@ -45,22 +36,23 @@ generateCxx automata name = let
             merger = stringMerger $ map snd fromGroups
             constants = stringConstants merger
             in do
-                put'' $ printf "// incoming in %d\n" state
-                forM_ constants $ \(name, value) -> do
-                    put'' $ printf "const char %s[] = \"%s\";\n"
+                put $ indent 2 $ printf "// incoming in %d\n" state
+                forM_ constants $ \(name, value) -> 
+                    put $ indent 3 $ printf "const char %s[] = \"%s\";\n"
                             name (escape value)
-                put'' "switch (state_) {\n"
-                put'' "default:\n"
-                put''' $ printf "wrongState(state_, %d);\n" state
+                indented 2 $ do
+                    put "switch (state_) {\n"
+                    put "default:\n"
+                    put $ indent 1 $ printf "wrongState(state_, %d);\n" state
                 forM_ fromGroups $ \(fs, str) -> do
-                        put' " "
-                        forM_ fs $ printf " case %d:"
-                        printf "\n"
-                        when (not $ B.null str) $ do
-                            let (name, offset) = oneString merger str
-                            put''' $ printf "put(%s + %d, %d);\n"
-                                    name offset (B.length str)
-                        put''' "break;\n"
+                    put $ B.pack " "
+                    forM_ fs $ put (B.pack " case %d:")
+                    put B.pack "\n"
+                    when (not $ B.null str) $ do
+                        let (name, offset) = oneString merger str
+                        put''' $ printf "put(%s + %d, %d);\n"
+                                name offset (B.length str)
+                    put''' "break;\n"
                 put'' "}\n"
 
         generatePiece (SetVariable from to name:ts) = do

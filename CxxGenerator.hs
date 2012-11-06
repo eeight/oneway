@@ -6,14 +6,15 @@ import qualified SimpleCxxGenerator
 import qualified Data.ByteString.Char8 as B
 
 import Automata
+import Generator
 
-generateCxx :: Automata -> B.ByteString -> IO ()
+generateCxx :: (TextGeneratorMonad m) => Automata -> B.ByteString -> m ()
 generateCxx automata name = do
-    putStrLn "#include \"abstract_template.h\"\n"
-    putStrLn "// Generated code. Do not edit.\n"
-    putStrLn ""
-    putStrLn "// ONEWAY"
+    put $ B.pack "#include \"abstract_template.h\"\n\n"
+    put $ B.pack "// Generated code. Do not edit.\n\n"
+    put $ B.pack "\n"
+    put $ B.pack "// ONEWAY\n"
     OnewayCxxGenerator.generateCxx automata name
-    putStrLn ""
-    putStrLn "// SIMPLE"
+    put $ B.pack "\n"
+    put $ B.pack "// SIMPLE\n"
     SimpleCxxGenerator.generateCxx automata name

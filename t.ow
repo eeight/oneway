@@ -1,1 +1,1 @@
-hello{{#BLOCK}} world{{/BLOCK}}
+hello{{#BLOCK}} world{{VAR}}{{/BLOCK}}
