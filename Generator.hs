@@ -1,54 +1,101 @@
-module Generator( TextGeneratorMonad(..)
-                , TextGenerator
-                , runGenerator
-                , indent
-                , gen
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+module Generator( TextGenerator
+                , StringArg
+                , bind
+                , subtemplate
+                , indented
+                , render
                 ) where
 
 import qualified Data.ByteString.Char8 as B
-import qualified Data.ByteString.Lazy.Char8 as L
-import qualified Data.Text as T
-import qualified Data.Text.Lazy.Encoding as T
-import qualified Data.Text.Template as Template
+import qualified Data.Map as M
 
-import Control.Arrow((***))
-import Control.Monad.Writer
+import Control.Monad.State
+import Data.Char(isSpace)
 
-indent :: Int -> B.ByteString -> B.ByteString
-indent i text = let
-    lines = B.lines text
-    indenter = B.concat  $ replicate i (B.pack "  ")
-    indentedLines = map (B.append indenter) lines
-    in B.concat indentedLines
+import Parser
 
-class (Monad m) => TextGeneratorMonad m where
-    put :: B.ByteString -> m ()
-    indented :: Int -> m () -> m ()
+data TemplateContext = TemplateContext
+    { tgIndent :: Int
+    , tgVariables :: M.Map B.ByteString B.ByteString
+    , tgSubtemplates :: M.Map B.ByteString [TemplateContext]
+    } deriving (Show)
 
-gen :: (TextGeneratorMonad m) => Int -> String -> [(String, String)] -> m ()
-gen i template context = let
-    template' = T.pack template
-    context' = map (T.pack *** T.pack) context
-    accessor x = case lookup x context' of
-        Just var -> var
-        Nothing -> error $ "Unbound variable " ++ T.unpack x ++ " in template"
-    text = T.encodeUtf8 $ Template.substitute template' accessor
-    text' = B.concat $ L.toChunks text
-    in put (indent i text')
+emptyTemplateContext :: TemplateContext
+emptyTemplateContext = TemplateContext 0 M.empty M.empty
 
-newtype TextGenerator a = TextGenerator
-    { runTextGenerator :: Int -> ([B.ByteString], a) }
+modifyIndent f ctx = ctx{tgIndent=f $ tgIndent ctx}
+modifyVars f ctx = ctx{tgVariables=f $ tgVariables ctx}
+modifySubs f ctx = ctx{tgSubtemplates=f $ tgSubtemplates ctx}
 
-instance Monad TextGenerator where
-    return a = TextGenerator $ const ([], a)
-    (TextGenerator gen) >>= f = TextGenerator $ \indent -> let
-        (result, v) = gen indent
-        (result', v') = runTextGenerator (f v) indent
-        in (result ++ result', v')
+mapAppend k v = M.alter alter k where
+    alter Nothing = Just $ [v]
+    alter (Just vs) = Just $ v:vs
 
-instance TextGeneratorMonad TextGenerator where
-    put string = TextGenerator $ \i -> ([indent i string], ())
-    indented i gen = put (runGenerator gen i)
+type TextGenerator = State TemplateContext
 
-runGenerator :: TextGenerator () -> Int -> B.ByteString
-runGenerator gen i = B.concat $ fst $ runTextGenerator gen i
+class StringArg a where
+    toString :: a -> B.ByteString
+
+instance StringArg B.ByteString where
+    toString = id
+
+instance StringArg String where
+    toString = B.pack
+
+instance (Show s) => StringArg s where
+    toString = B.pack . show
+
+bind :: (StringArg s) => String -> s -> TextGenerator ()
+bind name value = modify $ modifyVars $
+        M.insert (B.pack name) (toString value)
+
+subtemplate :: String -> TextGenerator () -> TextGenerator ()
+subtemplate name tpl = let
+    subCtx = execState tpl emptyTemplateContext
+    in modify $ modifySubs $ mapAppend (B.pack name) subCtx
+
+indented :: Int -> TextGenerator ()
+indented i = modify $ modifyIndent (+ i)
+
+indent level str 
+    | '\n' `B.elem` str = let
+        lines = B.lines str
+        indenter = B.concat $ replicate level (B.pack "    ")
+        lines' = map (B.append indenter) lines
+        in B.unlines lines'
+    | otherwise = str
+
+removeBlankLines :: B.ByteString -> B.ByteString
+removeBlankLines = B.unlines . filter (not .  B.all isSpace) . B.lines
+
+render :: Template -> TextGenerator () -> B.ByteString
+render template generator = let
+    renderOne :: [B.ByteString]
+              -> TemplatePiece
+              -> TemplateContext
+              -> [B.ByteString]
+    renderOne _ (TemplateString str) _ = [str]
+    renderOne stack (TemplateVariable name) ctx =
+        case M.lookup name (tgVariables ctx) of
+            Just str -> [str]
+            Nothing -> let
+                path = B.unpack $ B.intercalate (B.pack "/") $ reverse stack
+                name' = B.unpack name
+                in error $ "Undefined variable `" ++ name' ++
+                    "' in template `" ++ path ++ "'"
+    renderOne stack (TemplateBlock name body) ctx = let
+        subdicts = maybe [] reverse $ M.lookup name (tgSubtemplates ctx)
+        doRender subCtx = indent (tgIndent subCtx) $
+            renderTemplate (name:stack) body subCtx
+        in map doRender subdicts
+
+    renderTemplate stack body ctx = B.concat $
+            concatMap (flip (renderOne stack) ctx) body
+
+    context = execState generator emptyTemplateContext
+    in removeBlankLines $ renderTemplate [] template context

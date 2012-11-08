@@ -7,14 +7,9 @@ import qualified Data.ByteString.Char8 as B
 
 import Automata
 import Generator
+import Templates
 
-generateCxx :: (TextGeneratorMonad m) => Automata -> B.ByteString -> m ()
-generateCxx automata name = do
-    put $ B.pack "#include \"abstract_template.h\"\n\n"
-    put $ B.pack "// Generated code. Do not edit.\n\n"
-    put $ B.pack "\n"
-    put $ B.pack "// ONEWAY\n"
-    OnewayCxxGenerator.generateCxx automata name
-    put $ B.pack "\n"
-    put $ B.pack "// SIMPLE\n"
-    SimpleCxxGenerator.generateCxx automata name
+generateCxx :: Automata -> B.ByteString -> B.ByteString
+generateCxx automata name = render cxxTemplate $ do
+    bind "simple" $ SimpleCxxGenerator.generateCxx automata name
+    bind "oneway" $ OnewayCxxGenerator.generateCxx automata  name

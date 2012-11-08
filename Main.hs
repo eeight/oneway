@@ -1,12 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
-import Parser(parseTemplate)
+module Main where
+
+import Parser(parse)
 import Automata(buildAutomata, viableStates, incomingStates)
 import CxxGenerator(generateCxx)
 
 import qualified Data.ByteString.Char8 as B
 
 import Control.Monad
-import Data.Attoparsec(parseOnly)
 import Data.Vector(toList)
 import System.Environment(getArgs, getProgName)
 import System.Exit
@@ -17,14 +18,14 @@ usage = do
     printf "Usage: %s <toplevel class name> [filename] [--debug]\n" =<< getProgName
     putStrLn "\t--debug Show generated automata instead of generating template"
 
-parse k contents = case parseOnly parseTemplate contents of
+doParse k contents = case parse contents of
     Left err -> do
         hPutStrLn stderr $ "Error in template syntax: " ++ err
         exitFailure
     Right template -> k $ template
 
-generate classname template =
-            generateCxx (buildAutomata template) (B.pack classname)
+generate classname template = B.putStr $
+    generateCxx (buildAutomata template) (B.pack classname)
 
 debug template = do
             putStrLn "template:"
@@ -37,11 +38,13 @@ debug template = do
             putStrLn "viable states:"
             print $ viableStates auto
 
+main2 = doParse (generate "template") =<< B.readFile "t.ow"
+
 main = getArgs >>= \case
-    [filename, "--debug"] -> parse debug =<< B.readFile filename
-    ["--debug", filename] -> parse debug =<< B.readFile filename
-    ["--debug"] -> parse debug =<< B.getContents
+    [filename, "--debug"] -> doParse debug =<< B.readFile filename
+    ["--debug", filename] -> doParse debug =<< B.readFile filename
+    ["--debug"] -> doParse debug =<< B.getContents
     [classname, filename] ->
-        parse (generate classname) =<< B.readFile filename
-    [classname] -> parse (generate classname) =<< B.getContents
+        doParse (generate classname) =<< B.readFile filename
+    [classname] -> doParse (generate classname) =<< B.getContents
     _ -> usage

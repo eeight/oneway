@@ -2,8 +2,9 @@ module OnewayCxxGenerator(generateCxx) where
 
 import Automata
 import CxxFormatter
-import StringMerger
 import Generator
+import StringMerger
+import Templates
 
 import qualified Data.ByteString.Char8 as B
 import qualified Data.IntSet as S
@@ -12,18 +13,18 @@ import qualified Data.Map as M
 import Control.Monad
 import Data.Function(on)
 import Data.List(sort, sortBy, groupBy, tails)
-import Text.Printf
 
-generateCxx :: (TextGeneratorMonad m) => Automata -> B.ByteString -> m ()
+generateCxx :: Automata -> B.ByteString -> B.ByteString
 generateCxx automata name = let
     states = viableStates automata
     inStates = incomingStates automata
 
     generateTemplate automata name = let
-        maybePutText level str
+        maybePutText str
             | B.null str = return ()
-            | otherwise = put $ indent level $ 
-                printf "put(\"%s\", %d);\n" (escape str) (B.length str)
+            | otherwise = subtemplate "put" $ do
+                bind "str" (escape str)
+                bind "length" (B.length str)
 
         generateIncoming state = let
             fromStates =
@@ -35,80 +36,49 @@ generateCxx automata name = let
                     fromStates
             merger = stringMerger $ map snd fromGroups
             constants = stringConstants merger
-            in do
-                put $ indent 2 $ printf "// incoming in %d\n" state
-                forM_ constants $ \(name, value) -> 
-                    put $ indent 3 $ printf "const char %s[] = \"%s\";\n"
-                            name (escape value)
-                indented 2 $ do
-                    put "switch (state_) {\n"
-                    put "default:\n"
-                    put $ indent 1 $ printf "wrongState(state_, %d);\n" state
-                forM_ fromGroups $ \(fs, str) -> do
-                    put $ B.pack " "
-                    forM_ fs $ put (B.pack " case %d:")
-                    put B.pack "\n"
-                    when (not $ B.null str) $ do
+            in subtemplate "incoming" $ do
+                bind "state" state
+                forM_ constants $ \(name, value) ->
+                    subtemplate "constant" $ do
+                        bind "name" name
+                        bind "str" (escape value)
+                forM_ fromGroups $ \(fs, str) -> subtemplate "group" $ do
+                    forM_ fs $ subtemplate "state" . bind "state"
+                    when (not $ B.null str) $ subtemplate "put" $ do
                         let (name, offset) = oneString merger str
-                        put''' $ printf "put(%s + %d, %d);\n"
-                                name offset (B.length str)
-                    put''' "break;\n"
-                put'' "}\n"
+                        bind "name" name
+                        bind "offset" offset
+                        bind "length" (B.length str)
 
-        generatePiece (SetVariable from to name:ts) = do
-            let varName = makeVariableName name
-            let varName' = makeClassName name
-            put' $ printf "template <class... T>\n"
-            put' $ printf "void set%s(T... t) {\n" varName'
-            generateIncoming from
-            put'' "put(t...);\n"
-            case fastforward ts of
-                Just (next', carry) -> do
-                    maybePutText'' carry
-                    put'' $ printf "state_ = %d;\n" next'
-                Nothing -> put'' $ printf "state_ = %d;\n" to
-            put' "}\n"
+        generatePiece (SetVariable from to name:ts) =
+            subtemplate "set_variable" $ do
+                bindNames name
+                generateIncoming from
+                case fastforward ts of
+                    Just (next', carry) -> do
+                        maybePutText carry
+                        bind "next_state" next'
+                    Nothing -> bind "next_state" to
 
         generatePiece (Block state name body:_) = do
-            generateTemplate body name (indent + 1)
-            let className = makeClassName name
-            let onewayClassName = makeOnewayClassName name
-            put' $ printf "%s *add%s() {\n" onewayClassName className
-            generateIncoming state
-            put'' $ printf
-                "auto result = reinterpret_cast<%s*>(this);\n" onewayClassName
-            put'' "result->construct();\n"
-            put'' "return result;\n"
-            put' "}\n"
+            subtemplate "subtemplate" $ do
+                indented 1
+                generateTemplate body name
+            subtemplate "add_block" $ do
+                bindNames name
+                generateIncoming state
 
         generatePiece _ = return ()
         in do
             let Just (realBegin, carry) = fastforward automata
-            let className = makeOnewayClassName name
-            put $ printf "class %s : private AbstractTemplate {\n" className
-            put "public:\n"
-            put' "void construct() {\n"
-            maybePutText'' carry
-            put'' $ printf "state_ = %d;\n" realBegin
-            put' "}\n"
+            bindNames name
+            bind "realBegin" realBegin
+            maybePutText carry
 
-            put' $ printf "%s() {\n" className
-            put'' "construct();\n"
-            put' $ "}\n"
-
-            put' $ printf "~%s() {\n" className
-            put'' "finalize();\n"
-            put' "}\n"
-
-            put' $ printf "void finalize() {\n"
             generateIncoming (finalState automata)
-            put' "}\n"
-
-            put' "const char* data() const { return getData(); }\n"
-            put' "size_t size() const { return getSize(); }\n"
 
             forM_ (tails automata) generatePiece
 
-            put "};\n"
-
-    in generateTemplate automata name 0
+    context = subtemplate "template" $
+        generateTemplate automata name
+    in render onewayCxxTemplate context

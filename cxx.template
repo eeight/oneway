@@ -1,0 +1,8 @@
+#pragma once
+// Generated code. Do not edit.
+
+// ONEWAY
+{{oneway}}
+
+// SIMPLE
+{{simple}}

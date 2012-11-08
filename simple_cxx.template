@@ -1,0 +1,67 @@
+#include <boost/optional.hpp>
+
+{{#template}}
+class {{Name}} {
+public:
+{{#has_parent}}
+    typedef {{ParentName}}::Oneway::{{Name}}Oneway Oneway;
+{{/has_parent}}
+{{#no_parent}}
+    typedef {{Name}}Oneway Oneway;
+{{/no_parent}}
+
+{{$subtemplate:template}}
+
+    {{#unique_field}}
+    {{#block}}
+    {{Name}}* add{{Name}}() {
+        {{name}}_.emplace_back();
+        return &{{name}}_.back();
+    }
+
+    {{Name}}::Oneway* addOneway{{Name}}() {
+        {{name}}_.emplace_back();
+        return {{name}}_.back().oneway();
+    }
+    {{/block}}
+    {{#var}}
+    void set{{Name}}(const char* value) {
+        {{name}}_ = value;
+    }
+    {{/var}}
+    {{/unique_field}}
+
+    void generate(std::string* string) const {
+        if (ONEWAY_OVERRIDE_) {
+            ONEWAY_OVERRIDE_->finalize();
+            string->append(
+                    ONEWAY_OVERRIDE_->data(),
+                    ONEWAY_OVERRIDE_->data() + ONEWAY_OVERRIDE_->size());
+            return;
+        }
+        {{#field}}
+        {{#str}}*string += "{{str}}";{{/str}}
+        {{#var}}*string += {{name}}_;{{/var}}
+        {{#block}}
+        for (const {{Name}}& subblock: {{name}}_) {
+          subblock.generate(string);
+        }
+        {{/block}}
+        {{/field}}
+    }
+
+    Oneway* oneway() const {
+        ONEWAY_OVERRIDE_ = Oneway();
+        return &ONEWAY_OVERRIDE_.get();
+    }
+
+private:
+   mutable boost::optional<Oneway> ONEWAY_OVERRIDE_;
+   {{#unique_field}}
+   {{#str}}{{/str}}
+   {{#var}}std::string {{name}}_;{{/var}}
+   {{#block}}std::vector<{{Name}}> {{name}}_;{{/block}}
+   {{/unique_field}}
+};
+
+{{/template}}

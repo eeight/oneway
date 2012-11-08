@@ -1,7 +1,8 @@
 module CxxFormatter (escape
                     , makeVariableName
                     , makeClassName
-                    , namesContext
+                    , bindNames'
+                    , bindNames
                     ) where
 
 import qualified Data.ByteString.Char8 as B
@@ -10,8 +11,11 @@ import qualified Data.ByteString.Search as B
 import qualified Data.IntSet as S
 import qualified Data.Map as M
 
+import Generator
+
 import Data.Char(toLower, toUpper)
 
+escape :: B.ByteString -> B.ByteString
 escape str = let
     escapes = [
             ("\r", "\\r"),
@@ -19,18 +23,24 @@ escape str = let
             ("\"", "\\\""),
             ("\\", "\\\\")]
     replaceOne (a, b) = B.concat . L.toChunks . B.replace (B.pack a) (B.pack b)
-    replaced = foldr replaceOne str escapes
-    in B.unpack replaced
+    in foldr replaceOne str escapes
 
+makeVariableName :: B.ByteString -> String
 makeVariableName = go . B.unpack where
     go [] = []
     go ('_':x:xs) = toUpper x:go xs
     go (x:xs) = toLower x:go xs
 
+makeClassName :: B.ByteString -> String
 makeClassName name = case makeVariableName name of
     (x:xs) -> toUpper x:xs
     [] -> []
 
-namesContext :: B.ByteString -> [(String, String)]
-namesContext name = [
-        ("name", makeVariableName name), ("Name", makeClassName name)]
+
+bindNames' :: B.ByteString -> String -> String -> TextGenerator ()
+bindNames' name cname vname = do
+    bind cname $ B.pack $ makeClassName name
+    bind vname $ B.pack $ makeVariableName name
+
+bindNames :: B.ByteString -> TextGenerator ()
+bindNames name = bindNames' name "Name" "name"

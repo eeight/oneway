@@ -1,0 +1,72 @@
+#include "abstract_template.h"
+
+{{#template}}
+
+class {{Name}}Oneway : private AbstractTemplate {
+public:
+    {{$subtemplate:template}}
+
+    void construct() {
+        {{#put}}
+        put("{{str}}", {{length}});
+        {{/put}}
+
+        state_ = {{realBegin}};
+    }
+
+    {{Name}}Oneway() {
+        construct();
+    }
+
+    ~{{Name}}Oneway() {
+        finalize();
+    }
+
+    {{#set_variable}}
+    template <class... T>
+    void set{{Name}}(T... t) {
+        {{$incoming:template/incoming}}
+        put(t...);
+        {{$put:template/put}}
+        state_ = {{next_state}};
+    }
+    {{/set_variable}}
+
+    {{#add_block}}
+    {{Name}}Oneway *add{{Name}}() {
+        {{$incoming:template/incoming}}
+        {{Name}}Oneway* result = reinterpret_cast<{{Name}}Oneway*>(this);
+        result->construct();
+        return result;
+    }
+    {{/add_block}}
+
+    void finalize() {
+        {{#incoming}}
+        // incoming in {{state}}
+        {{#constant}}const char {{name}}[] = "{{str}}";
+        {{/constant}}
+        switch (state_) {
+        default:
+            wrongState(state_, {{state}});
+        {{#group}}
+        {{#state}}case {{state}}: {{/state}}
+            {{#put}}put({{name}} + {{offset}}, {{length}});{{/put}}
+            break;
+        {{/group}}
+        }
+        {{/incoming}}
+    }
+
+    const char* data() const {
+        // Defined in AbstractTemplate
+        return getData();
+    }
+
+    size_t size() const {
+        // Defined in AbstractTemplate
+        return getSize();
+    }
+};
+
+{{/template}}
