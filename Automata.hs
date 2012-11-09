@@ -24,7 +24,21 @@ type Automata = [Edge]
 data Edge = Append Int Int B.ByteString
           | SetVariable Int Int B.ByteString
           | Block Int B.ByteString Automata
-    deriving (Show)
+
+brief :: B.ByteString -> B.ByteString
+brief str
+    | B.length str > 10 = (B.take 7 str) `B.append` (B.pack "...")
+    | otherwise = str
+
+instance Show Edge where
+    show (Append from to str) =
+        "Append " ++ show from ++ " " ++ show to ++ " " ++ show (brief str)
+    show (SetVariable from to name) =
+        "SetVariable " ++ show from ++
+            " " ++ show to ++
+            " " ++ B.unpack name
+    show (Block state name body) =
+        "Block " ++ show state ++ " " ++ show name ++ " " ++ show body
 
 buildAutomata :: Template -> Automata
 buildAutomata template = evalState (go template) (0, 0) where
