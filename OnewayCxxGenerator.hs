@@ -7,9 +7,11 @@ import StringMerger
 import Templates
 
 import qualified Data.ByteString.Char8 as B
-import qualified Data.IntSet as S
+import qualified Data.IntSet as IS
 import qualified Data.Map as M
+import qualified Data.Set as S
 
+import Control.Arrow(second)
 import Control.Monad
 import Data.Function(on)
 import Data.List(sort, sortBy, groupBy, tails)
@@ -20,23 +22,25 @@ generateCxx automata name = let
     inStates = incomingStates automata
 
     generateTemplate automata name = let
-        maybePutText str
+        maybePutText str indent
             | B.null str = return ()
             | otherwise = subtemplate "put" $ do
+                indented indent
                 bind "str" (escape str)
                 bind "length" (B.length str)
 
-        generateIncoming state = let
+        generateIncoming state indent = let
             fromStates =
                     groupBy ((==) `on` snd) $
                     sortBy (compare `on` snd) $
-                    filter ((`S.member` states) . fst) $
+                    filter ((`IS.member` states) . fst) $
                     (state, B.empty):maybe [] id (M.lookup state inStates)
             fromGroups = map (\((i, str):ss) -> (sort $ i:map fst ss, str))
                     fromStates
             merger = stringMerger $ map snd fromGroups
             constants = stringConstants merger
             in subtemplate "incoming" $ do
+                indented indent
                 bind "state" state
                 forM_ constants $ \(name, value) ->
                     subtemplate "constant" $ do
@@ -50,34 +54,63 @@ generateCxx automata name = let
                         bind "offset" offset
                         bind "length" (B.length str)
 
-        generatePiece (SetVariable from to name:ts) =
-            subtemplate "set_variable" $ do
+        generateVariable :: (B.ByteString, [(Int, Int, B.ByteString)])
+                         -> TextGenerator ()
+        generateVariable (name, sorts) = do
+            subtemplate "variable" $ do
                 bindNames name
-                generateIncoming from
-                case fastforward ts of
-                    Just (next', carry) -> do
-                        maybePutText carry
-                        bind "next_state" next'
-                    Nothing -> bind "next_state" to
+                bind "max_count" $ length sorts
+                forM_ (zip [0::Int ..] sorts) $ \(index, (from, to, carry)) ->
+                    subtemplate "iteration" $ do
+                        bind "index" index
+                        generateIncoming from 2
+                        maybePutText carry 2
+                        bind "next_state" to
 
-        generatePiece (Block state name body:_) = do
+        generateBlock :: (B.ByteString, Int, Automata)
+                      -> TextGenerator ()
+        generateBlock (name, state, body) = do
             subtemplate "subtemplate" $ do
                 indented 1
                 generateTemplate body name
             subtemplate "add_block" $ do
                 bindNames name
-                generateIncoming state
+                generateIncoming state 0
 
-        generatePiece _ = return ()
+        variables = let
+            go map [] = map
+            go map ((SetVariable from to name:ts):tss) = let
+                var = case fastforward ts of
+                    Just (next, carry) -> (from, next, carry)
+                    Nothing -> (from, to, B.empty)
+                map' = M.insertWith (++) name [var] map
+                in go map' tss
+            go map (_:tss) = go map tss
+
+            list = M.toList $ go M.empty (tails automata)
+            in map (second reverse) list
+
+        blocks = go S.empty [] automata where
+            go _ acc []  = acc
+            go seen acc (Block state name body:ts)
+                | name `S.member` seen = error $
+                    "Duplicate block `" ++ (B.unpack name) ++ "'"
+                | otherwise = go
+                    (S.insert name seen)
+                    ((name, state, body):acc)
+                    ts
+            go seen acc (_:ts) = go seen acc ts
+
         in do
             let Just (realBegin, carry) = fastforward automata
             bindNames name
             bind "realBegin" realBegin
-            maybePutText carry
+            maybePutText carry 0
 
-            generateIncoming (finalState automata)
+            generateIncoming (finalState automata) 0
 
-            forM_ (tails automata) generatePiece
+            forM_ variables generateVariable
+            forM_ blocks generateBlock
 
     context = subtemplate "template" $
         generateTemplate automata name

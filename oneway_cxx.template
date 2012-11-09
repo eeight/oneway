@@ -1,57 +1,61 @@
-#include "abstract_template.h"
+#include "oneway_context.h"
 
 {{#template}}
 
-class {{Name}}Oneway : private AbstractTemplate {
+class {{Name}}Oneway {
 public:
     {{$subtemplate:template}}
 
-    void construct() {
+    explicit {{Name}}Oneway(OnewayContext* context):
+            context_(context){{#variable}}, {{name}}Count_(0){{/variable}}
+    {
         {{#put}}
-        put("{{str}}", {{length}});
+        context_->put("{{str}}", {{length}});
         {{/put}}
-
-        state_ = {{realBegin}};
+        context_->setState({{realBegin}});
     }
 
-    {{Name}}Oneway() {
-        construct();
-    }
-
-    ~{{Name}}Oneway() {
-        finalize();
-    }
-
-    {{#set_variable}}
+    {{#variable}}
     template <class... T>
     void set{{Name}}(T... t) {
-        {{$incoming:template/incoming}}
-        put(t...);
-        {{$put:template/put}}
-        state_ = {{next_state}};
+        switch ({{name}}Count_) {
+        default:
+            context_->wrongNumber("{{name}}", {{max_count}});
+        {{#iteration}}
+            case {{index}}:
+                {{$incoming:template/incoming}}
+                context_->put(t...);
+                {{$put:template/put}}
+                context_->setState({{next_state}});
+                break;
+        {{/iteration}}
+        }
+        ++{{name}}Count_;
     }
-    {{/set_variable}}
+    {{/variable}}
 
     {{#add_block}}
-    {{Name}}Oneway *add{{Name}}() {
+    {{Name}}Oneway add{{Name}}() {
         {{$incoming:template/incoming}}
-        {{Name}}Oneway* result = reinterpret_cast<{{Name}}Oneway*>(this);
-        result->construct();
-        return result;
+        return {{Name}}Oneway(context_);
     }
     {{/add_block}}
 
     void finalize() {
+        staticFinalize(context_);
+    }
+
+    static void staticFinalize(OnewayContext* context_) {
         {{#incoming}}
         // incoming in {{state}}
         {{#constant}}const char {{name}}[] = "{{str}}";
         {{/constant}}
-        switch (state_) {
+        switch (context_->state()) {
         default:
-            wrongState(state_, {{state}});
+            context_->wrongState(context_->state(), {{state}});
         {{#group}}
         {{#state}}case {{state}}: {{/state}}
-            {{#put}}put({{name}} + {{offset}}, {{length}});{{/put}}
+            {{#put}}context_->put({{name}} + {{offset}}, {{length}});{{/put}}
             break;
         {{/group}}
         }
@@ -59,14 +63,18 @@ public:
     }
 
     const char* data() const {
-        // Defined in AbstractTemplate
-        return getData();
+        return context_->data();
     }
 
     size_t size() const {
-        // Defined in AbstractTemplate
-        return getSize();
+        return context_->size();
     }
+
+private:
+    OnewayContext* context_;
+    {{#variable}}
+    int {{name}}Count_;
+    {{/variable}}
 };
 
 {{/template}}

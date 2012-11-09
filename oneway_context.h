@@ -21,17 +21,17 @@ private:
     std::string what_;
 };
 
-class AbstractTemplate {
-protected:
-    AbstractTemplate() :
+class OnewayContext {
+public:
+    explicit OnewayContext() :
         state_(0)
     {}
 
-    size_t getSize() const {
+    size_t size() const {
         return buffer_.size();
     }
 
-    const char* getData() const {
+    const char* data() const {
         return buffer_.data();
     }
 
@@ -43,13 +43,24 @@ protected:
         put(str, strlen(str));
     }
 
-    void wrongState(int stateFrom, int stateTo) {
+    int state() const { return state_; }
+    void setState(int state) { state_ = state; }
+
+    static void wrongState(int stateFrom, int stateTo) {
         std::stringstream s;
         s << "Transition from state " << stateFrom <<
                 " to " << stateTo << " is illegal";
         throw WrongState(s.str());
     }
 
+    static void wrongNumber(const char* name, int maxIterations) {
+        std::stringstream s;
+        s << "Variable " << name <<
+                " occured more times than allowed. " <<
+                "The number should not have exceeded " << maxIterations;
+        throw WrongState(s.str());
+    }
+private:
     int state_;
     std::vector<char> buffer_;
 };

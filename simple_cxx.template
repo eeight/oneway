@@ -14,12 +14,12 @@ public:
 
     {{#unique_field}}
     {{#block}}
-    {{Name}}* add{{Name}}() {
+    {{Name}}& add{{Name}}() {
         {{name}}_.emplace_back();
-        return &{{name}}_.back();
+        return {{name}}_.back();
     }
 
-    {{Name}}::Oneway* addOneway{{Name}}() {
+    {{Name}}::Oneway addOneway{{Name}}() {
         {{name}}_.emplace_back();
         return {{name}}_.back().oneway();
     }
@@ -33,7 +33,7 @@ public:
 
     void generate(std::string* string) const {
         if (ONEWAY_OVERRIDE_) {
-            ONEWAY_OVERRIDE_->finalize();
+            Oneway::staticFinalize(ONEWAY_OVERRIDE_.get_ptr());
             string->append(
                     ONEWAY_OVERRIDE_->data(),
                     ONEWAY_OVERRIDE_->data() + ONEWAY_OVERRIDE_->size());
@@ -50,18 +50,17 @@ public:
         {{/field}}
     }
 
-    Oneway* oneway() const {
-        ONEWAY_OVERRIDE_ = Oneway();
-        return &ONEWAY_OVERRIDE_.get();
+    Oneway oneway() const {
+        ONEWAY_OVERRIDE_ = OnewayContext();
+        return Oneway(ONEWAY_OVERRIDE_.get_ptr());
     }
 
 private:
-   mutable boost::optional<Oneway> ONEWAY_OVERRIDE_;
-   {{#unique_field}}
-   {{#str}}{{/str}}
-   {{#var}}std::string {{name}}_;{{/var}}
-   {{#block}}std::vector<{{Name}}> {{name}}_;{{/block}}
-   {{/unique_field}}
+    mutable boost::optional<OnewayContext> ONEWAY_OVERRIDE_;
+    {{#unique_field}}
+    {{#var}}std::string {{name}}_;{{/var}}
+    {{#block}}std::vector<{{Name}}> {{name}}_;{{/block}}
+    {{/unique_field}}
 };
 
 {{/template}}

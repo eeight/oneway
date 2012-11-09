@@ -13,6 +13,7 @@
     {{#TIMES}}
             <r:length>{{LENGTH}}</r:length>
             <r:jamsTime>{{JAMS_TIME}}</r:jamsTime>
+            <r:length2>{{LENGTH}}</r:length2>
     {{/TIMES}}
             </r:RouterRouteMetaData>
         </gml:metaDataProperty>
