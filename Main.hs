@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 module Main where
 
 import Parser(parse)
@@ -40,7 +39,7 @@ debug template = do
 
 main2 = doParse (generate "template") =<< B.readFile "t.ow"
 
-main = getArgs >>= \case
+main = getArgs >>= \x -> case x of
     [filename, "--debug"] -> doParse debug =<< B.readFile filename
     ["--debug", filename] -> doParse debug =<< B.readFile filename
     ["--debug"] -> doParse debug =<< B.getContents
