@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "format.h"
+
 class WrongState : public std::exception {
 public:
     explicit WrongState(std::string what) :
@@ -35,12 +37,13 @@ public:
         return buffer_.data();
     }
 
-    void put(const char* str, size_t length) {
-        buffer_.insert(buffer_.end(), str, str + length);
+    void put(const char* string, size_t size) {
+        buffer_.insert(buffer_.end(), string, string + size);
     }
 
-    void put(const char* str) {
-        put(str, strlen(str));
+    template <class Iterator>
+    void put(Iterator begin, Iterator end) {
+        buffer_.insert(buffer_.end(), begin, end);
     }
 
     int state() const { return state_; }

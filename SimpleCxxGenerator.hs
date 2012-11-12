@@ -25,8 +25,11 @@ generateCxx automata name = let
             subtemplate "field" tpl
             subtemplate "unique_field" tpl
 
-        addField (SetVariable _ _ name) = do
-            let tpl = subtemplate "var" (bindNames name)
+        addField (SetVariable _ _ name escapes) = do
+            let tpl = subtemplate "var" $ do
+                bindNames name
+                forM_ escapes $
+                    subtemplate "escape" . bind "escape" . escaperName
             lift $ subtemplate "field" tpl
             seen <- State.gets $ S.member name
             when (not seen) $ do
@@ -41,14 +44,13 @@ generateCxx automata name = let
         in do
             bindNames name
 
-            forM_ automata generateSubtemplate 
+            forM_ automata generateSubtemplate
 
             case parentName of
                 Nothing -> subtemplate "no_parent" (bindNames name)
-                Just name' -> subtemplate "has_parent" $ do 
+                Just name' -> subtemplate "has_parent" $ do
                     bindNames name
                     bindNames' name' "ParentName" "parentName"
-                    
             State.evalStateT (forM_ automata addField) S.empty
 
     context = subtemplate "template" $

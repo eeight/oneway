@@ -1,5 +1,8 @@
 #include <boost/optional.hpp>
 
+#include "format.h"
+#include <iostream>
+
 {{#template}}
 class {{Name}} {
 public:
@@ -10,7 +13,7 @@ public:
     typedef {{Name}}Oneway Oneway;
 {{/no_parent}}
 
-{{$subtemplate:template}}
+{{$subtemplate=template}}
 
     {{#unique_field}}
     {{#block}}
@@ -25,8 +28,12 @@ public:
     }
     {{/block}}
     {{#var}}
-    void set{{Name}}(const char* value) {
-        {{name}}_ = value;
+    template <class... T>
+    void set{{Name}}(T... t) {
+        {{name}}_.clear();
+        FormatContext format(t...);
+        {{name}}_.insert(
+                {{name}}_.end(), format.begin(), format.end());
     }
     {{/var}}
     {{/unique_field}}
@@ -41,7 +48,10 @@ public:
         }
         {{#field}}
         {{#str}}*string += "{{str}}";{{/str}}
-        {{#var}}*string += {{name}}_;{{/var}}
+        {{#var}}string->insert(string->end(),
+                {{#escape}}{{escape}}({{/escape}}{{name}}_.begin(){{#escape}}){{/escape}},
+                {{#escape}}{{escape}}({{/escape}}{{name}}_.end(){{#escape}}){{/escape}});
+        {{/var}}
         {{#block}}
         for (const {{Name}}& subblock: {{name}}_) {
           subblock.generate(string);

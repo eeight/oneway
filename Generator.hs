@@ -80,7 +80,7 @@ render template generator = let
               -> TemplateContext
               -> [B.ByteString]
     renderOne _ (TemplateString str) _ = [str]
-    renderOne stack (TemplateVariable name) ctx =
+    renderOne stack (TemplateVariable name _) ctx =
         case M.lookup name (tgVariables ctx) of
             Just str -> [str]
             Nothing -> let

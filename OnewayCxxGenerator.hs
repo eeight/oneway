@@ -3,6 +3,7 @@ module OnewayCxxGenerator(generateCxx) where
 import Automata
 import CxxFormatter
 import Generator
+import Parser
 import StringMerger
 import Templates
 
@@ -54,14 +55,20 @@ generateCxx automata name = let
                         bind "offset" offset
                         bind "length" (B.length str)
 
-        generateVariable :: (B.ByteString, [(Int, Int, B.ByteString)])
+        generateVariable :: (B.ByteString,
+                                [([Escape], Int, Int, B.ByteString)])
                          -> TextGenerator ()
         generateVariable (name, sorts) = do
             subtemplate "variable" $ do
                 bindNames name
                 bind "max_count" $ length sorts
-                forM_ (zip [0::Int ..] sorts) $ \(index, (from, to, carry)) ->
+                let sorts' = zip [0::Int ..] sorts
+                forM_ sorts' $ \(index, (escapes, from, to, carry)) ->
                     subtemplate "iteration" $ do
+                        forM_ escapes $
+                            subtemplate "escape" .
+                                bind "escape" .
+                                    escaperName
                         bind "index" index
                         generateIncoming from 2
                         maybePutText carry 2
@@ -79,10 +86,10 @@ generateCxx automata name = let
 
         variables = let
             go map [] = map
-            go map ((SetVariable from to name:ts):tss) = let
+            go map ((SetVariable from to name escapes:ts):tss) = let
                 var = case fastforward ts of
-                    Just (next, carry) -> (from, next, carry)
-                    Nothing -> (from, to, B.empty)
+                    Just (next, carry) -> (escapes, from, next, carry)
+                    Nothing -> (escapes, from, to, B.empty)
                 map' = M.insertWith (++) name [var] map
                 in go map' tss
             go map (_:tss) = go map tss

@@ -3,6 +3,7 @@ module CxxFormatter (escape
                     , makeClassName
                     , bindNames'
                     , bindNames
+                    , escaperName
                     ) where
 
 import qualified Data.ByteString.Char8 as B
@@ -12,6 +13,7 @@ import qualified Data.IntSet as S
 import qualified Data.Map as M
 
 import Generator
+import Parser
 
 import Data.Char(toLower, toUpper)
 
@@ -44,3 +46,7 @@ bindNames' name cname vname = do
 
 bindNames :: B.ByteString -> TextGenerator ()
 bindNames name = bindNames' name "Name" "name"
+
+escaperName :: Escape -> B.ByteString
+escaperName XmlEscape = B.pack "xmlEscape"
+escaperName JsonEscape = B.pack "jsonEscape"

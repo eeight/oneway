@@ -4,7 +4,7 @@
 
 class {{Name}}Oneway {
 public:
-    {{$subtemplate:template}}
+    {{$subtemplate=template}}
 
     explicit {{Name}}Oneway(OnewayContext* context):
             context_(context){{#variable}}, {{name}}Count_(0){{/variable}}
@@ -23,9 +23,14 @@ public:
             context_->wrongNumber("{{name}}", {{max_count}});
         {{#iteration}}
             case {{index}}:
-                {{$incoming:template/incoming}}
-                context_->put(t...);
-                {{$put:template/put}}
+                {{$incoming=template/incoming}}
+                {
+                    FormatContext format(t...);
+                    context_->put(
+                            {{#escape}}{{escape}}({{/escape}}format.begin() {{#escape}}){{/escape}},
+                            {{#escape}}{{escape}}({{/escape}}format.end(){{#escape}}){{/escape}});
+                }
+                {{$put=template/put}}
                 context_->setState({{next_state}});
                 break;
         {{/iteration}}
@@ -36,7 +41,7 @@ public:
 
     {{#add_block}}
     {{Name}}Oneway add{{Name}}() {
-        {{$incoming:template/incoming}}
+        {{$incoming=template/incoming}}
         return {{Name}}Oneway(context_);
     }
     {{/add_block}}

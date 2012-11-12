@@ -1,4 +1,5 @@
-module Parser( Template
+module Parser( Escape(..)
+             , Template
              , TemplatePiece(..)
              , parse
              , closeTemplate
@@ -19,8 +20,12 @@ import Text.Parsec.Prim((<|>))
 
 type Template = [TemplatePiece]
 
+data Escape = XmlEscape
+            | JsonEscape
+    deriving (Show)
+
 data TemplatePiece = TemplateString B.ByteString
-                   | TemplateVariable B.ByteString
+                   | TemplateVariable B.ByteString [Escape]
                    | TemplateBlock B.ByteString Template
     deriving (Show)
 
@@ -28,33 +33,50 @@ p_template :: P.GenParser Char () Template
 p_template = p_oneTemplate <* P.eof where
     p_oneTemplate = P.many p_piece
 
-    p_piece = P.try p_block <|> P.try p_variable <|> P.try p_string
+    p_piece = P.try p_control <|> P.try p_string
 
-    p_control = B.pack <$> (
-        P.string "{{" *> P.many1 (P.noneOf "}") <* P.string "}}")
+    p_escape = P.try p_xml <|> P.try p_json where
+        p_xml = P.string "xml_escape" *> return XmlEscape
+        p_json = P.string "json_escape" *> return JsonEscape
 
-    p_block = do
-        header <- p_control
+    p_tag = do
+        P.string "{{"
+        name <- B.pack <$> P.many1 (P.noneOf ":}")
+        escapes <- P.many $ P.char ':' *> p_escape
+        P.string "}}"
+        return (name, escapes)
+
+    p_control = do
+        tag@(name, _) <- p_tag
+        case (B.null name, B.head name) of
+            (True, _) -> fail "Empty name in block"
+            (_, '#') -> p_block tag
+            _ -> p_variable tag
+
+    p_block (header, escapes) = do
+        when (not $ null escapes) $
+                fail "Block header cannot have escapes"
         when (B.head header /= '#') $
                 fail "Block begin tag must begin with `#'"
         let name = B.tail header
         body <- p_oneTemplate
-        footer <- p_control
+        (footer, escapes) <- p_tag
+        when (not $ null escapes) $
+                fail "Block header cannot have escapes"
         when (B.head footer /= '/') $
-                fail $ "Block end tag must begin with `/': " ++
-                    (B.unpack footer)
+                fail $ "Block end tag must begin with `/' (expected /" ++
+                    B.unpack name ++ ") : " ++ B.unpack footer
         let name' = B.tail footer
         when (name /= name') $
                 fail $ "Begin and end tags mismatch: " ++
                     B.unpack name ++ " and " ++ B.unpack name'
         return $ TemplateBlock name body
 
-    p_variable = do
-        name <- p_control
+    p_variable (name, escapes) = do
         when (B.head name == '#' || B.head name == '/') $
             fail $ "Variable name cannot start with '#' or '/': " ++
                 B.unpack name
-        return $ TemplateVariable name
+        return $ TemplateVariable name escapes
 
     p_string = let
         p_noBrace = P.many1 (P.noneOf "{")
@@ -79,9 +101,9 @@ findSubtemplate (a:as) template =
 
 closeTemplate = fix . flip close where
     close = map . go
-    go result var@(TemplateVariable name)
-        | B.head name == '$' && ':'  `B.elem` name = let
-            (replacedName', path') = B.span (/= ':') name
+    go result var@(TemplateVariable name _)
+        | B.head name == '$' && '='  `B.elem` name = let
+            (replacedName', path') = B.span (/= '=') name
             replacedName = B.tail replacedName'
             path = B.tail path'
             in case findSubtemplate (B.splitWith (== '/') path) result of

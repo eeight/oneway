@@ -22,7 +22,7 @@ import Parser
 type Automata = [Edge]
 
 data Edge = Append Int Int B.ByteString
-          | SetVariable Int Int B.ByteString
+          | SetVariable Int Int B.ByteString [Escape]
           | Block Int B.ByteString Automata
 
 brief :: B.ByteString -> B.ByteString
@@ -33,10 +33,11 @@ brief str
 instance Show Edge where
     show (Append from to str) =
         "Append " ++ show from ++ " " ++ show to ++ " " ++ show (brief str)
-    show (SetVariable from to name) =
+    show (SetVariable from to name escapes) =
         "SetVariable " ++ show from ++
             " " ++ show to ++
-            " " ++ B.unpack name
+            " " ++ B.unpack name ++
+            " " ++ show escapes
     show (Block state name body) =
         "Block " ++ show state ++ " " ++ show name ++ " " ++ show body
 
@@ -50,7 +51,7 @@ buildAutomata template = evalState (go template) (0, 0) where
         let ret piece = liftM (piece:) $ go ts
         case t of
             TemplateString str -> ret $ Append lastN n' str
-            TemplateVariable name -> ret $ SetVariable lastN n' name
+            TemplateVariable name escapes -> ret $ SetVariable lastN n' name escapes
             TemplateBlock name block -> do
                 subtemplate <- go block
                 modify $ second (const lastN)
@@ -59,7 +60,7 @@ buildAutomata template = evalState (go template) (0, 0) where
 finalState :: Automata -> Int
 finalState automata = case (last automata) of
     Append _ to _ -> to
-    SetVariable _ to _ -> to
+    SetVariable _ to _ _ -> to
     Block state _ _ -> state
 
 incomingStates :: Automata -> M.Map Int [(Int, B.ByteString)]
@@ -70,7 +71,7 @@ incomingStates automata = execState (forM_ automata go) M.empty where
     go (Append from to str) =
         copyList from to $ ((from, str):) . map (second $ flip B.append str)
 
-    go (SetVariable _ to _) = return ()
+    go (SetVariable _ to _ _) = return ()
 
     go (Block state _ subblock) = do
         forM_ subblock go
@@ -79,7 +80,7 @@ incomingStates automata = execState (forM_ automata go) M.empty where
 
 fastforward :: Automata -> Maybe (Int, B.ByteString)
 fastforward (Append _ to str:_) = Just (to, str)
-fastforward (SetVariable state _ _:_) = Just (state, B.empty)
+fastforward (SetVariable state _ _ _:_) = Just (state, B.empty)
 fastforward (Block state _ _:_) = Just (state, B.empty)
 fastforward _ = Nothing
 
@@ -92,7 +93,7 @@ viableStates automata = let
     go [] = return ()
     go (t:ts) = case t of
         Append{} -> return ()
-        SetVariable _ to _ -> if null ts
+        SetVariable _ to _ _ -> if null ts
             then append to
             else appendFirst ts
         Block _ _ body -> appendFirst body >> forM_ (tails body) go
