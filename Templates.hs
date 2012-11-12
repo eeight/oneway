@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Templates( simpleCxxTemplate
                 , onewayCxxTemplate
                 , cxxTemplate
@@ -5,26 +6,17 @@ module Templates( simpleCxxTemplate
 
 import qualified Data.ByteString.Char8 as B
 
-import System.IO.Unsafe
+import Language.Haskell.TH.Syntax
 
 import Parser
 
-unsafeFileContents :: String -> B.ByteString
-unsafeFileContents = unsafePerformIO . B.readFile
-
-simpleCxxTemplateString = unsafeFileContents "simple_cxx.template"
-onewayCxxTemplateString = unsafeFileContents "oneway_cxx.template"
-cxxTemplateString = unsafeFileContents "cxx.template"
-
-
 simpleCxxTemplate,  onewayCxxTemplate, cxxTemplate :: Template
-
 [simpleCxxTemplate, onewayCxxTemplate, cxxTemplate] = let
-    template str = case parse str of
+    template str = case parse (B.pack str) of
         Left err -> error $ "Cannot parse internal template: " ++ err
         Right template -> template
-    strings = [ simpleCxxTemplateString
-              , onewayCxxTemplateString
-              , cxxTemplateString
+    strings = [ $(runIO (readFile "simple_cxx.template") >>= liftString)
+              , $(runIO (readFile "oneway_cxx.template") >>= liftString)
+              , $(runIO (readFile "cxx.template") >>= liftString)
               ]
     in map template strings
