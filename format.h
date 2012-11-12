@@ -86,10 +86,21 @@ public:
         begin_(string.c_str()), end_(begin_ + string.size())
     {}
 
+    explicit FormatContext(int n) {
+        begin_ = buffer_;
+        end_ = buffer_ + snprintf(buffer_, 100, "%d", n);
+    }
+
+    explicit FormatContext(double d, int width=6) {
+        begin_ = buffer_;
+        end_ = buffer_ + snprintf(buffer_, 100, "%.*f", width, d);
+    }
+
     const char* begin() { return begin_; }
     const char* end() { return end_; }
 
 private:
     const char* begin_;
     const char* end_;
+    char buffer_[100];
 };
