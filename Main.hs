@@ -7,7 +7,6 @@ import CxxGenerator(generateCxx)
 import qualified Data.ByteString.Char8 as B
 
 import Control.Monad
-import Data.Vector(toList)
 import System.Environment(getArgs, getProgName)
 import System.Exit
 import System.IO
@@ -16,6 +15,7 @@ import Text.Printf(printf)
 usage = do
     printf "Usage: %s <toplevel class name> [filename] [--debug]\n" =<< getProgName
     putStrLn "\t--debug Show generated automata instead of generating template"
+    exitFailure
 
 doParse k contents = case parse contents of
     Left err -> do
