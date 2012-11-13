@@ -5,6 +5,7 @@ import Automata(buildAutomata, viableStates, incomingStates)
 import CxxGenerator(generateCxx)
 
 import qualified Data.ByteString.Char8 as B
+import qualified Data.IntSet as S
 
 import Control.Monad
 import System.Environment(getArgs, getProgName)
@@ -29,13 +30,11 @@ generate classname template = B.putStr $
 debug template = do
             putStrLn "template:"
             print template
-            putStrLn "automata:"
+            putStrLn "\nautomata:"
             let auto = buildAutomata template
             print auto
-            putStrLn "incoming states:"
-            print $ incomingStates auto
-            putStrLn "viable states:"
-            print $ viableStates auto
+            putStrLn "\nviable states:"
+            print $ S.toList $ viableStates auto
 
 main2 = doParse (generate "template") =<< B.readFile "t.ow"
 
