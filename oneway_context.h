@@ -57,9 +57,9 @@ public:
                 std::ostreambuf_iterator<char>(out));
     }
 
-    static void wrongState(int stateFrom, int stateTo) {
+    void wrongState(int stateTo) {
         std::stringstream s;
-        s << "Transition from state " << stateFrom <<
+        s << "Transition from state " << state_ <<
                 " to " << stateTo << " is illegal";
         throw WrongState(s.str());
     }

@@ -94,6 +94,21 @@ public:
         end_ = buffer_ + snprintf(buffer_, 100, "%d", n);
     }
 
+    explicit FormatContext(long n) {
+        begin_ = buffer_;
+        end_ = buffer_ + snprintf(buffer_, 100, "%ld", n);
+    }
+
+    explicit FormatContext(unsigned n) {
+        begin_ = buffer_;
+        end_ = buffer_ + snprintf(buffer_, 100, "%u", n);
+    }
+
+    explicit FormatContext(unsigned long n) {
+        begin_ = buffer_;
+        end_ = buffer_ + snprintf(buffer_, 100, "%lu", n);
+    }
+
     explicit FormatContext(double d, int width=6) {
         begin_ = buffer_;
         end_ = buffer_ + snprintf(buffer_, 100, "%.*f", width, d);

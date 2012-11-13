@@ -62,7 +62,7 @@ public:
         {{/constant}}
         switch (context_->state()) {
         default:
-            context_->wrongState(context_->state(), {{state}});
+            context_->wrongState({{state}});
         {{#group}}
         {{#state}}case {{state}}: {{/state}}
             {{#put}}context_->put({{name}} + {{offset}}, {{length}});{{/put}}
