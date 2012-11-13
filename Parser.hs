@@ -2,7 +2,6 @@ module Parser( Escape(..)
              , Template
              , TemplatePiece(..)
              , parse
-             , closeTemplate
              ) where
 
 import qualified Data.ByteString.Char8 as B
@@ -89,7 +88,7 @@ p_template = p_oneTemplate <* P.eof where
 parse :: B.ByteString -> Either String Template
 parse str = case P.parse p_template "" str of
     Left err -> Left $ show err
-    Right ans -> Right ans
+    Right ans -> Right $ closeTemplate ans
 
 findSubtemplate [] template = Just $ template
 findSubtemplate (a:as) template =

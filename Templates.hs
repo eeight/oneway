@@ -27,4 +27,4 @@ simpleCxxTemplate,  onewayCxxTemplate, cxxTemplate :: Template
               , onewayCxxTemplateString
               , cxxTemplateString
               ]
-    in map (closeTemplate . template) strings
+    in map template strings
