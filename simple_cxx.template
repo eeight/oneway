@@ -13,16 +13,16 @@ public:
     typedef {{Name}}Oneway Oneway;
 {{/no_parent}}
 
-{{$subtemplate=template}}
+    {{$subtemplate=template}}
 
     {{#unique_field}}
     {{#block}}
-    {{Name}}& add{{Name}}() {
+    {{Name}}* add{{Name}}() {
         {{name}}_.emplace_back();
-        return {{name}}_.back();
+        return &{{name}}_.back();
     }
 
-    {{Name}}::Oneway addOneway{{Name}}() {
+    {{Name}}::Oneway* addOneway{{Name}}() {
         {{name}}_.emplace_back();
         return {{name}}_.back().oneway();
     }
@@ -39,11 +39,11 @@ public:
     {{/unique_field}}
 
     void generate(std::string* string) const {
-        if (ONEWAY_OVERRIDE_) {
-            Oneway::staticFinalize(ONEWAY_OVERRIDE_.get_ptr());
+        if (ONEWAY_CONTEXT_) {
+            ONEWAY_.finalize();
             string->append(
-                    ONEWAY_OVERRIDE_->data(),
-                    ONEWAY_OVERRIDE_->data() + ONEWAY_OVERRIDE_->size());
+                    ONEWAY_CONTEXT_->data(),
+                    ONEWAY_CONTEXT_->data() + ONEWAY_CONTEXT_->size());
             return;
         }
         {{#field}}
@@ -60,13 +60,21 @@ public:
         {{/field}}
     }
 
-    Oneway oneway() const {
-        ONEWAY_OVERRIDE_ = OnewayContext();
-        return Oneway(ONEWAY_OVERRIDE_.get_ptr());
+    std::string generate() const {
+        std::string text;
+        generate(&text);
+        return text;
+    }
+
+    Oneway* oneway() {
+        ONEWAY_CONTEXT_ = OnewayContext();
+        ONEWAY_ = Oneway(ONEWAY_CONTEXT_.get_ptr());
+        return &ONEWAY_;
     }
 
 private:
-    mutable boost::optional<OnewayContext> ONEWAY_OVERRIDE_;
+    boost::optional<OnewayContext> ONEWAY_CONTEXT_;
+    mutable Oneway ONEWAY_;
     {{#unique_field}}
     {{#var}}std::string {{name}}_;{{/var}}
     {{#block}}std::vector<{{Name}}> {{name}}_;{{/block}}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstring>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -48,6 +49,13 @@ public:
 
     int state() const { return state_; }
     void setState(int state) { state_ = state; }
+
+    void feedTo(std::ostream& out) {
+        std::copy(
+                buffer_.begin(),
+                buffer_.end(),
+                std::ostreambuf_iterator<char>(out));
+    }
 
     static void wrongState(int stateFrom, int stateTo) {
         std::stringstream s;

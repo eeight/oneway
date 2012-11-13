@@ -72,6 +72,9 @@ JsonEscape<Iterator> jsonEscape(Iterator iterator) {
     return JsonEscape<Iterator>(iterator);
 }
 
+template <class...>
+struct DoFormat;
+
 class FormatContext {
 public:
     explicit FormatContext(const char* string) :
@@ -94,6 +97,16 @@ public:
     explicit FormatContext(double d, int width=6) {
         begin_ = buffer_;
         end_ = buffer_ + snprintf(buffer_, 100, "%.*f", width, d);
+    }
+
+    template <class... T>
+    explicit FormatContext(const T&... t) {
+        begin_ = buffer_;
+        end_ = 0;
+        DoFormat<T...>()(t..., buffer_, &begin_, &end_);
+        if (!end_) {
+            end_ = begin_ + strlen(buffer_);
+        }
     }
 
     const char* begin() { return begin_; }

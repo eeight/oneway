@@ -6,8 +6,13 @@ class {{Name}}Oneway {
 public:
     {{$subtemplate=template}}
 
+    {{Name}}Oneway():
+        context_(0)
+    {}
+
     explicit {{Name}}Oneway(OnewayContext* context):
-            context_(context){{#variable}}, {{name}}Count_(0){{/variable}}
+            context_(context)
+            {{#variable}}, {{name}}Count_(0){{/variable}}
     {
         {{#put}}
         context_->put("{{str}}", {{length}});
@@ -40,17 +45,17 @@ public:
     {{/variable}}
 
     {{#add_block}}
-    {{Name}}Oneway add{{Name}}() {
+    {{Name}}Oneway* add{{Name}}() {
         {{$incoming=template/incoming}}
-        return {{Name}}Oneway(context_);
+        {{name}}Template_ = {{Name}}Oneway(context_);
+        return &{{name}}Template_;
+    }
+    {{Name}}Oneway* addOneway{{Name}}() {
+        return add{{Name}}();
     }
     {{/add_block}}
 
     void finalize() {
-        staticFinalize(context_);
-    }
-
-    static void staticFinalize(OnewayContext* context_) {
         {{#incoming}}
         // incoming in {{state}}
         {{#constant}}const char {{name}}[] = "{{str}}";
@@ -80,6 +85,9 @@ private:
     {{#variable}}
     int {{name}}Count_;
     {{/variable}}
+    {{#subtemplate}}
+    {{Name}}Oneway {{name}}Template_;
+    {{/subtemplate}}
 };
 
 {{/template}}
