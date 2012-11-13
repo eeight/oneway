@@ -1,7 +1,9 @@
+#include "format.h"
+#
 #include <boost/optional.hpp>
 
-#include "format.h"
 #include <iostream>
+#include <memory>
 
 {{#template}}
 class {{Name}} {
@@ -67,13 +69,13 @@ public:
     }
 
     Oneway* oneway() {
-        ONEWAY_CONTEXT_ = OnewayContext();
-        ONEWAY_ = Oneway(ONEWAY_CONTEXT_.get_ptr());
+        ONEWAY_CONTEXT_.reset(new OnewayContext());
+        ONEWAY_ = Oneway(ONEWAY_CONTEXT_.get());
         return &ONEWAY_;
     }
 
 private:
-    boost::optional<OnewayContext> ONEWAY_CONTEXT_;
+    std::unique_ptr<OnewayContext> ONEWAY_CONTEXT_;
     mutable Oneway ONEWAY_;
     {{#unique_field}}
     {{#var}}std::string {{name}}_;{{/var}}
