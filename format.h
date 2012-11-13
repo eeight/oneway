@@ -85,6 +85,10 @@ public:
         begin_(string), end_(begin_ + length)
     {}
 
+    FormatContext(const char* string, int length) :
+        begin_(string), end_(begin_ + length)
+    {}
+
     explicit FormatContext(const std::string& string) :
         begin_(string.c_str()), end_(begin_ + string.size())
     {}
