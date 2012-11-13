@@ -15,7 +15,7 @@ import qualified Data.Map as M
 import Generator
 import Parser
 
-import Data.Char(toLower, toUpper)
+import Data.Char(toLower, toUpper, isLower)
 
 escape :: B.ByteString -> B.ByteString
 escape str = let
@@ -30,6 +30,7 @@ escape str = let
 makeVariableName :: B.ByteString -> String
 makeVariableName = go . B.unpack where
     go [] = []
+    go s@(x:xs) | not ('_' `elem` s) && any isLower s = toLower x:xs
     go ('_':x:xs) = toUpper x:go xs
     go (x:xs) = toLower x:go xs
 
